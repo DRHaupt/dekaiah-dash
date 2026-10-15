@@ -1,0 +1,20 @@
+{
+  "name": "dekaiah-dash",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ride requests between friends and one driver.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node --env-file=.env server/index.js"
+  },
+  "engines": {
+    "node": ">=20.6"
+  },
+  "dependencies": {
+    "express": "^5.3.0",
+    "firebase-admin": "^14.5.0",
+    "pg": "^8.23.1",
+    "web-push": "^3.6.7",
+    "ws": "^8.22.0"
+  }
+}
