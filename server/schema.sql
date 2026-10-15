@@ -75,3 +75,8 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   endpoint     TEXT UNIQUE NOT NULL,
   subscription JSONB NOT NULL
 );
+
+-- Added later. ALTER ... IF NOT EXISTS keeps older databases up to date.
+ALTER TABLE rides ADD COLUMN IF NOT EXISTS reminder_sent BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE rides ADD COLUMN IF NOT EXISTS share_token TEXT UNIQUE;
+ALTER TABLE driver_state ADD COLUMN IF NOT EXISTS away_note TEXT NOT NULL DEFAULT '';

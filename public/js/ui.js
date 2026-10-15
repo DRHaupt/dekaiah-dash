@@ -162,7 +162,7 @@ export function historyList(rides, { showRider = false } = {}) {
       <div class="small muted">${esc(formatWhen(r.scheduled_for || r.created_at))}${showRider ? ' · ' + esc(r.rider_name) : ''}</div>
       <div class="ellipsis">${esc(r.dropoff_address)}</div>
       <div class="small muted ellipsis">From ${esc(r.pickup_address)}</div>
-    </div><div class="small ${r.status === 'done' ? '' : 'muted'}">${esc(r.status === 'cancelled' ? (r.cancelled_by === 'driver' ? 'Cancelled by driver' : 'Cancelled') : STATUS_LABEL[r.status])}</div></div>
+    </div><div class="small ${r.status === 'done' ? '' : 'muted'}">${esc(r.status !== 'cancelled' ? STATUS_LABEL[r.status] : { driver: 'Cancelled by driver', timeout: 'No answer' }[r.cancelled_by] || 'Cancelled')}</div></div>
   </li>`).join('')}</ul>`;
 }
 

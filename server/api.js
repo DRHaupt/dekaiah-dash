@@ -1,4 +1,5 @@
 const fs = require('fs');
+const crypto = require('crypto');
 const path = require('path');
 const express = require('express');
 const db = require('./db');
@@ -51,6 +52,7 @@ async function driverInfo() {
     car_colour: state.car_colour,
     car_plate: state.car_plate,
     online: state.online,
+    away_note: state.away_note,
   };
 }
 
@@ -67,6 +69,7 @@ async function forViewer(ride, user) {
   if (MOVING.includes(ride.status)) {
     const state = await db.one('SELECT lat, lng FROM driver_state WHERE id = 1');
     ride.car = state.lat != null ? { lat: state.lat, lng: state.lng } : null;
+    if (liveRoute && liveRoute.rideId === ride.id && liveRoute.status === ride.status) ride.route = liveRoute.line;
   }
   return ride;
 }
@@ -86,11 +89,21 @@ async function broadcast(rideId) {
   return ride;
 }
 
-async function updateEta(ride, car) {
-  const seconds = await maps.driveSeconds(car, { lat: ride.pickup_lat, lng: ride.pickup_lng });
-  if (seconds == null) return ride.eta_seconds;
-  await db.query('UPDATE rides SET eta_seconds = $1, eta_at = now() WHERE id = $2', [seconds, ride.id]);
-  return seconds;
+// The driving line for the ride happening now, kept in memory: { rideId, status, line, at }.
+let liveRoute = null;
+
+// Works out the road from the car to the pickup (or to the drop-off once the ride has started).
+// Returns the drive time to the pickup when the driver is on the way.
+async function updateRoute(ride, car) {
+  const to = ride.status === 'in_progress'
+    ? { lat: ride.dropoff_lat, lng: ride.dropoff_lng }
+    : { lat: ride.pickup_lat, lng: ride.pickup_lng };
+  const r = await maps.route(car, to);
+  if (!r) return ride.eta_seconds;
+  liveRoute = { rideId: ride.id, status: ride.status, line: r.line, at: Date.now() };
+  if (ride.status !== 'on_the_way') return ride.eta_seconds;
+  await db.query('UPDATE rides SET eta_seconds = $1, eta_at = now() WHERE id = $2', [r.seconds, ride.id]);
+  return r.seconds;
 }
 
 // Called every time the driver's phone reports a new position.
@@ -100,10 +113,16 @@ async function onDriverLocation(lat, lng) {
   if (!ride) return;
 
   let eta = ride.eta_seconds;
-  if (ride.status === 'on_the_way') {
-    const stale = !ride.eta_at || Date.now() - new Date(ride.eta_at).getTime() > 20000;
-    if (stale) eta = await updateEta(ride, { lat, lng });
+  let route = null;
+  if (ride.status === 'on_the_way' || ride.status === 'in_progress') {
+    const fresh = liveRoute && liveRoute.rideId === ride.id && liveRoute.status === ride.status && Date.now() - liveRoute.at < 20000;
+    if (!fresh) {
+      eta = await updateRoute(ride, { lat, lng });
+      if (liveRoute && liveRoute.rideId === ride.id) route = liveRoute.line;
+    }
+  }
 
+  if (ride.status === 'on_the_way') {
     const metres = maps.metresBetween({ lat, lng }, { lat: ride.pickup_lat, lng: ride.pickup_lng });
     if (!ride.close_notified && (metres < 400 || (eta != null && eta <= 150))) {
       await db.query('UPDATE rides SET close_notified = true WHERE id = $1', [ride.id]);
@@ -111,7 +130,14 @@ async function onDriverLocation(lat, lng) {
       notify.tell(rider, `${firstName(driver.name)} is almost there`, eta != null ? `About ${minutes(eta)} away.` : '', { withSms: true, tag: 'ride' });
     }
   }
-  if (ride.rider_id) live.send(ride.rider_id, { type: 'car', ride_id: ride.id, lat, lng, eta_seconds: eta });
+
+  // The route line is only sent when it changed, to keep these updates small.
+  const update = { type: 'car', ride_id: ride.id, lat, lng, eta_seconds: eta, ...(route ? { route } : {}) };
+  if (ride.rider_id) live.send(ride.rider_id, update);
+  if (route) {
+    const driver = await getDriver();
+    if (driver) live.send(driver.id, update);
+  }
 }
 
 // ---------- Account ----------
@@ -127,6 +153,29 @@ router.get('/config', (req, res) => {
     vapidPublicKey: process.env.VAPID_PUBLIC_KEY || null,
   });
 });
+
+// Public page for "Share my ride". Anyone with the link can follow the ride until it ends.
+router.get('/track/:token', wrap(async (req, res) => {
+  const ride = await db.one('SELECT * FROM rides WHERE share_token = $1', [text(req.params.token, 100)]);
+  if (!ride) throw new Oops(404, "This link doesn't work. Ask for a new one.");
+  if (!OPEN.includes(ride.status)) return res.json({ status: ride.status, over: true });
+  const info = await driverInfo();
+  const out = {
+    status: ride.status,
+    rider: firstName(ride.rider_name),
+    driver: info.first_name,
+    car: [info.car_colour, info.car_model].filter(Boolean).join(' '),
+    plate: info.car_plate,
+    pickup: { address: ride.pickup_address, lat: ride.pickup_lat, lng: ride.pickup_lng },
+    dropoff: { address: ride.dropoff_address, lat: ride.dropoff_lat, lng: ride.dropoff_lng },
+    scheduled_for: ride.scheduled_for,
+    eta_seconds: ride.status === 'on_the_way' ? ride.eta_seconds : null,
+  };
+  const withCar = await forViewer({ ...ride }, { role: 'passenger' });
+  out.car_position = withCar.car || null;
+  out.route = withCar.route || null;
+  res.json(out);
+}));
 
 router.use(wrap(loadUser));
 
@@ -216,6 +265,17 @@ router.get('/reverse', wrap(async (req, res) => {
   const lat = Number(req.query.lat), lng = Number(req.query.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new Oops(400, 'Missing location.');
   res.json(await maps.reverse(lat, lng));
+}));
+
+// The road between two points, for drawing on the map. ?from=lat,lng&to=lat,lng
+router.get('/route', wrap(async (req, res) => {
+  const point = (v) => {
+    const [lat, lng] = String(v || '').split(',').map(Number);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new Oops(400, 'Missing location.');
+    return { lat, lng };
+  };
+  const r = await maps.route(point(req.query.from), point(req.query.to));
+  res.json(r || { seconds: null, line: null });
 }));
 
 router.get('/places', wrap(async (req, res) => {
@@ -372,15 +432,28 @@ router.post('/rides/:id/status', driverOnly, wrap(async (req, res) => {
     notify.tell(rider, `${name} can't take this ride`, 'Sorry! Message or call if you need to.', { withSms: true, tag: 'ride' });
   } else if (status === 'on_the_way') {
     let eta = null;
-    if (state.lat != null) eta = await updateEta(ride, { lat: state.lat, lng: state.lng });
+    if (state.lat != null) eta = await updateRoute({ ...ride, status }, { lat: state.lat, lng: state.lng });
     notify.tell(rider, `${name} is on the way`, eta != null ? `About ${minutes(eta)} away.` : '', { tag: 'ride' });
   } else if (status === 'arrived') {
     const look = [car && `Look for the ${car}`, state.car_plate && `plate ${state.car_plate}`].filter(Boolean).join(', ');
     notify.tell(rider, `${name} is here`, look ? look + '.' : '', { withSms: true, tag: 'ride' });
+  } else if (status === 'in_progress' && state.lat != null) {
+    await updateRoute({ ...ride, status }, { lat: state.lat, lng: state.lng });
   }
 
   const updated = await broadcast(ride.id);
   res.json(await forViewer(updated, req.user));
+}));
+
+router.post('/rides/:id/share', wrap(async (req, res) => {
+  const ride = await rideForUser(req.params.id, req.user);
+  if (!OPEN.includes(ride.status)) throw new Oops(400, 'This ride is over.');
+  let token = ride.share_token;
+  if (!token) {
+    token = crypto.randomBytes(12).toString('base64url');
+    await db.query('UPDATE rides SET share_token = $1 WHERE id = $2', [token, ride.id]);
+  }
+  res.json({ url: `${req.protocol}://${req.get('host')}/track/${token}` });
 }));
 
 // ---------- Messages ----------
@@ -411,9 +484,23 @@ router.post('/rides/:id/messages', wrap(async (req, res) => {
 
 // ---------- Driver only ----------
 
+// Lets every passenger with the app open see the change right away.
+async function driverChanged() {
+  const info = await driverInfo();
+  live.sendAll({ type: 'driver', driver: info }, 'passenger');
+  return info;
+}
+
 router.post('/driver/online', driverOnly, wrap(async (req, res) => {
-  await db.query('UPDATE driver_state SET online = $1 WHERE id = 1', [!!req.body.online]);
-  res.json(await driverInfo());
+  const online = !!req.body.online;
+  // The "back at 9pm" note only makes sense while offline.
+  await db.query(`UPDATE driver_state SET online = $1${online ? ", away_note = ''" : ''} WHERE id = 1`, [online]);
+  res.json(await driverChanged());
+}));
+
+router.patch('/driver/note', driverOnly, wrap(async (req, res) => {
+  await db.query('UPDATE driver_state SET away_note = $1 WHERE id = 1', [text(req.body.away_note, 80)]);
+  res.json(await driverChanged());
 }));
 
 router.patch('/driver/car', driverOnly, wrap(async (req, res) => {
@@ -421,7 +508,7 @@ router.patch('/driver/car', driverOnly, wrap(async (req, res) => {
     'UPDATE driver_state SET car_model = $1, car_colour = $2, car_plate = $3 WHERE id = 1',
     [text(req.body.car_model, 60), text(req.body.car_colour, 40), text(req.body.car_plate, 20).toUpperCase()]
   );
-  res.json(await driverInfo());
+  res.json(await driverChanged());
 }));
 
 router.post('/driver/photo', driverOnly, wrap(async (req, res) => {
@@ -433,7 +520,7 @@ router.post('/driver/photo', driverOnly, wrap(async (req, res) => {
   fs.writeFileSync(path.join(UPLOAD_DIR, file), Buffer.from(match[1], 'base64'));
   await db.query('UPDATE driver_state SET photo = $1 WHERE id = 1', [file]);
   if (old.photo) fs.rm(path.join(UPLOAD_DIR, old.photo), () => {});
-  res.json(await driverInfo());
+  res.json(await driverChanged());
 }));
 
 router.get('/friends', driverOnly, wrap(async (req, res) => {
@@ -467,6 +554,46 @@ router.post('/friends/:id', driverOnly, wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// ---------- Every 30 seconds: expire old requests, send reminders ----------
+
+async function checkRides() {
+  const driver = await getDriver();
+  if (!driver) return;
+  const name = firstName(driver.name);
+
+  // A "now" request nobody answered in 10 minutes, or a scheduled one whose time passed.
+  const expired = await db.query(
+    `UPDATE rides SET status = 'cancelled', cancelled_by = 'timeout', updated_at = now()
+     WHERE status = 'requested'
+       AND ((scheduled_for IS NULL AND created_at < now() - interval '10 minutes') OR scheduled_for < now())
+     RETURNING *`
+  );
+  for (const ride of expired) {
+    await broadcast(ride.id);
+    const rider = await db.one('SELECT * FROM users WHERE id = $1', [ride.rider_id]);
+    notify.tell(rider, `${name} didn't get to your request in time`, `Try again, or give ${name} a call.`, { withSms: true, tag: 'ride' });
+  }
+
+  // 30 minutes before a scheduled ride.
+  const soon = await db.query(
+    `UPDATE rides SET reminder_sent = true
+     WHERE scheduled_for IS NOT NULL AND NOT reminder_sent AND status IN ('requested', 'accepted')
+       AND scheduled_for <= now() + interval '30 minutes'
+       AND created_at < scheduled_for - interval '30 minutes'  -- skip rides booked less than 30 minutes ahead
+     RETURNING *`
+  );
+  for (const ride of soon) {
+    const time = when(ride.scheduled_for).split(', ').pop();
+    if (ride.status === 'requested') {
+      notify.tell(driver, `${ride.rider_name}'s ride at ${time} still needs an answer`, `From ${ride.pickup_address}`, { withSms: true, tag: 'request' });
+      continue;
+    }
+    const rider = await db.one('SELECT * FROM users WHERE id = $1', [ride.rider_id]);
+    notify.tell(rider, `Your ride with ${name} is at ${time}`, `You'll get a heads-up when ${name} is on the way.`, { withSms: true, tag: 'ride' });
+    notify.tell(driver, `Pick up ${ride.rider_name} at ${time}`, `From ${ride.pickup_address}`, { withSms: true, tag: 'reminder' });
+  }
+}
+
 // ---------- Errors ----------
 
 router.use((err, req, res, next) => {
@@ -475,4 +602,4 @@ router.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong. Try again.' });
 });
 
-module.exports = { router, onDriverLocation };
+module.exports = { router, onDriverLocation, checkRides };

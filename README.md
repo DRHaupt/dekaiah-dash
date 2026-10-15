@@ -2,8 +2,10 @@
 
 Friends request rides, Dekaiah drives. No payments and no prices. There's one driver.
 
-- **Passengers** sign up with an invite link and wait for approval. Then they can request rides now or for later, watch the car on the map, message or call the driver, save places and see their ride history.
-- **The driver** can go online or offline and gets an alert with a sound for each new request. The driver accepts or declines, opens directions in Google or Apple Maps, updates the ride status, and manages friends, scheduled rides, history, car info and a profile photo.
+- **Passengers** sign up with an invite link and wait for approval. Then they can request rides now or for later, watch the car and its route on the map, message or call the driver (with one-tap quick replies), share a live link to the ride with someone, save places and see their ride history.
+- **The driver** can go online or offline (with a note like "Back at 9pm") and gets an alert with a sound for each new request. The driver accepts or declines, opens directions in Google or Apple Maps, updates the ride status, and manages friends, scheduled rides, history, car info and a profile photo.
+- **Automatic:** a reminder 30 minutes before scheduled rides, and requests that get no answer close on their own so nobody is left waiting.
+- **Dark mode** follows the phone's setting.
 
 ## How it's built
 
@@ -12,9 +14,9 @@ Friends request rides, Dekaiah drives. No payments and no prices. There's one dr
 | Server | Node.js, Express |
 | Database | PostgreSQL |
 | Login | Firebase Authentication (Google and email/password), free plan |
-| Map | Leaflet and OpenStreetMap, free with no key |
+| Map | Leaflet and OpenStreetMap, free with no key. Dark mode uses CARTO's free dark map. |
 | Address search | Nominatim (OpenStreetMap), free with no key |
-| Drive times | OSRM public server, free with no key |
+| Drive times and route lines | OSRM public server, free with no key |
 | Live updates | WebSockets |
 | Phone notifications | Web Push, using keys you make yourself for free |
 | Text messages | Twilio (optional, costs money: see below) |
@@ -38,6 +40,7 @@ public/
   js/rider.js   passenger screens
   js/driver.js  driver screens
   js/chat.js    messages
+  js/track.js   the "Share my ride" page (track.html), no login needed
   js/map.js, js/ui.js, js/api.js, js/push.js
 ```
 
@@ -194,6 +197,10 @@ After opening it from the home screen, tap **Turn on notifications**.
 - **"Dekaiah is almost there"** is sent when you're about 2½ minutes away or 400 m from the pickup.
 - **Removing a friend** deletes their account here. They'd need your invite link again to come back. **Blocking** keeps them out for good.
 - **Forgot password** on the email login sends a reset email from Firebase.
+- **Unanswered requests:** a "now" request with no answer after 10 minutes closes and your friend gets a text. A scheduled request you haven't answered by its pickup time closes the same way. You get a reminder 30 minutes before for those still waiting.
+- **Reminders:** 30 minutes before an accepted scheduled ride, you and your friend both get a notification and text. Rides booked less than 30 minutes ahead skip the reminder.
+- **Share my ride** links show the car, the route and the status. They show no phone numbers and stop working when the ride ends.
+- **Your offline note** ("Back at 9pm") clears itself when you go online.
 - The free OpenStreetMap services (map tiles, address search, drive times) have fair-use limits. A group of friends won't come close to them.
 
 ## Updating

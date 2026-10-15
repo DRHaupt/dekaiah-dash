@@ -4,7 +4,7 @@ import {
   $, esc, icons, sheet, page, pageHead, onActions, busy, toast, formatWhen, closePage,
   routeHtml, avatarHtml, telLink, historyList, resizePhoto, STATUS_LABEL,
 } from './ui.js';
-import { setMarker, clearMarkers, fit, directionsLinks } from './map.js';
+import { setMarker, clearMarkers, fit, directionsLinks, setRoute } from './map.js';
 import { pushBanner, pushStatus } from './push.js';
 import { openChat, chatMessage, chatOpenFor } from './chat.js';
 
@@ -43,7 +43,7 @@ export async function start(c) {
   rides.filter((r) => r.status === 'requested').forEach((r) => seen.add(r.id));
   render();
   updateTracking();
-  setInterval(() => { if (!chatOpenFor() && !$('#alert').offsetParent) render(); }, 60000); // keeps "up next" times fresh
+  setInterval(() => { if (!chatOpenFor() && !$('#alert').offsetParent && !document.activeElement.closest('#sheet')) render(); }, 60000); // keeps "up next" times fresh
 }
 
 async function loadAll() {
@@ -74,8 +74,11 @@ export function onLive(msg) {
       alertQueue.push(ride);
       showNextAlert();
     }
-    if (ride.status === 'cancelled' && ride.cancelled_by === 'rider' && before) {
-      toast(`${ride.rider_name} cancelled their ride.`, 6000);
+    if (ride.status === 'cancelled' && before) {
+      if (ride.cancelled_by === 'rider') toast(`${ride.rider_name} cancelled their ride.`, 6000);
+      if (ride.cancelled_by === 'timeout') toast(`${ride.rider_name}'s request timed out. They got a text.`, 6000);
+    }
+    if (ride.status !== 'requested') {
       alertQueue = alertQueue.filter((r) => r.id !== ride.id);
       if (currentAlert && currentAlert.id === ride.id) closeAlert();
     }
@@ -90,6 +93,10 @@ export function onLive(msg) {
       toast(`${ride ? ride.rider_name.split(' ')[0] : 'Message'}: ${m.body}`);
       render();
     }
+  } else if (msg.type === 'car') {
+    // New route line from the server while driving to the pickup or drop-off.
+    const ride = activeRide();
+    if (ride && ride.id === msg.ride_id && msg.route) { ride.route = msg.route; setRoute(ride.route); }
   } else if (msg.type === 'friends') {
     if (friendsOpen) friendsPage();
     else toast('Someone wants to join. Check Friends.');
@@ -257,7 +264,7 @@ function rideActions(ride) {
     },
     chat: () => {
       unread[ride.id] = 0;
-      openChat({ ride, meId: ctx.user.id, otherName: ride.rider_name, otherPhone: ride.rider_phone, onClose: render });
+      openChat({ ride, meId: ctx.user.id, otherName: ride.rider_name, otherPhone: ride.rider_phone, role: 'driver', onClose: render });
     },
     cancel: (d, btn) => {
       if (!confirm(`Cancel ${ride.rider_name}'s ride? They'll get a text.`)) return;
@@ -298,6 +305,7 @@ function render() {
   if (ride) {
     setMarker('pickup', { lat: ride.pickup_lat, lng: ride.pickup_lng });
     setMarker('dropoff', { lat: ride.dropoff_lat, lng: ride.dropoff_lng });
+    if (ride.status !== 'arrived') setRoute(ride.route || null);
   }
 
   const reqs = requests().filter((r) => !r.scheduled_for || new Date(r.scheduled_for) - Date.now() < 2 * 3600 * 1000);
@@ -308,7 +316,9 @@ function render() {
     ${info.online
       ? `<div class="row"><div class="grow"><span class="dot on"></span><b>You're online</b></div><button class="btn small light" data-action="offline">Go offline</button></div>`
       : `<div><h2>You're offline</h2><p class="muted small" style="margin-top:4px">Go online so friends can ask for a ride now. Scheduled requests still come in.</p></div>
-         <button class="btn green" data-action="online">Go online</button>`}
+         <button class="btn green" data-action="online">Go online</button>
+         <label class="field"><span>Note for friends (optional)</span>
+           <input id="away-note" maxlength="80" placeholder="Like: Back at 9pm" value="${esc(info.away_note || '')}"></label>`}
 
     ${ride ? activeHtml(ride) : ''}
 
@@ -338,6 +348,14 @@ function render() {
     scheduled: () => scheduledPage(),
     'enable-push': (d, btn) => busy(btn, async () => { await ctx.enablePush(); render(); }),
   });
+
+  const note = $('#away-note', el);
+  if (note) {
+    note.addEventListener('change', () => busy(null, async () => {
+      info = await api('PATCH', '/driver/note', { away_note: note.value });
+      toast(info.away_note ? 'Friends will see your note.' : 'Note removed.');
+    }));
+  }
 
   if (ride && here) fitView();
   else if (!ride && here) fit([here]);

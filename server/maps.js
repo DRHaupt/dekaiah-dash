@@ -39,14 +39,18 @@ async function reverse(lat, lng) {
   return { address: shortAddress(p), lat, lng };
 }
 
-// Drive time in seconds from one point to another, or null if it couldn't be worked out.
-async function driveSeconds(from, to) {
+// Driving route between two points: { seconds, line } where line is a list of [lat, lng],
+// or null if it couldn't be worked out.
+async function route(from, to) {
   try {
-    const res = await fetch(`${OSRM}/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=false`, {
-      headers: { 'User-Agent': USER_AGENT },
-    });
+    const res = await fetch(
+      `${OSRM}/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`,
+      { headers: { 'User-Agent': USER_AGENT } }
+    );
     const data = await res.json();
-    return data.routes && data.routes[0] ? Math.round(data.routes[0].duration) : null;
+    const r = data.routes && data.routes[0];
+    if (!r) return null;
+    return { seconds: Math.round(r.duration), line: r.geometry.coordinates.map(([lng, lat]) => [lat, lng]) };
   } catch {
     return null;
   }
@@ -60,4 +64,4 @@ function metresBetween(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-module.exports = { search, reverse, driveSeconds, metresBetween };
+module.exports = { search, reverse, route, metresBetween };

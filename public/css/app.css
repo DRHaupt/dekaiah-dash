@@ -1,16 +1,40 @@
 :root {
-  --black: #000;
+  /* --fg is text and main buttons, --bg is sheets and pages. Dark mode swaps them below. */
+  --fg: #000;
+  --bg: #fff;
   --text: #000;
   --muted: #5e5e5e;
   --line: #e8e8e8;
   --soft: #f3f3f3;
-  --white: #fff;
+  --handle: #d6d6d6;
+  --map-bg: #e9e6df;
+  --notice: #fff6d6;
   --green: #05a357;
   --red: #d42a1e;
   --radius: 12px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
   color-scheme: light;
+}
+
+/* Follows the phone's dark mode setting. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fg: #fff;
+    --bg: #161616;
+    --text: #f2f2f2;
+    --muted: #a6a6a6;
+    --line: #2c2c2c;
+    --soft: #262626;
+    --handle: #444;
+    --map-bg: #1d1f21;
+    --notice: #3a3216;
+    --green: #0bb764;
+    --red: #f2564a;
+    color-scheme: dark;
+  }
+  .leaflet-container a { color: #8ab4f8; }
+  .leaflet-control-attribution { background: rgba(22,22,22,.7) !important; color: #aaa; }
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -21,11 +45,12 @@ html, body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 16px;
   color: var(--text);
-  background: var(--white);
+  background: var(--bg);
   overscroll-behavior: none;
 }
 
 body { overflow: hidden; }
+button, a { color: inherit; }
 .hidden { display: none !important; }
 h1, h2, h3, p { margin: 0; }
 h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
@@ -42,22 +67,23 @@ h3 { font-size: 17px; font-weight: 600; }
 
 /* ---------- Map ---------- */
 
-#map { position: fixed; inset: 0; background: #e9e6df; z-index: 0; }
+#map { position: fixed; inset: 0; background: var(--map-bg); z-index: 0; }
 .leaflet-control-attribution { font-size: 10px; }
 .leaflet-top { top: var(--safe-top); }
 
-.pin { width: 18px; height: 18px; border-radius: 50%; background: var(--black); border: 4px solid var(--white); box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+.pin { width: 18px; height: 18px; border-radius: 50%; background: var(--fg); border: 4px solid var(--bg); box-shadow: 0 1px 4px rgba(0,0,0,.4); }
 .pin.drop { border-radius: 3px; }
 .pin.me { background: #276ef1; }
-.car-pin { width: 38px; height: 38px; border-radius: 50%; background: var(--black); display: grid; place-items: center; box-shadow: 0 2px 6px rgba(0,0,0,.4); }
-.car-pin svg { width: 22px; height: 22px; fill: var(--white); }
+.route-line { stroke: var(--fg); }
+.car-pin { width: 38px; height: 38px; border-radius: 50%; background: var(--fg); display: grid; place-items: center; box-shadow: 0 2px 6px rgba(0,0,0,.4); }
+.car-pin svg { width: 22px; height: 22px; fill: var(--bg); }
 
 /* ---------- Floating buttons ---------- */
 
 .float-btn {
   position: fixed; z-index: 10;
   width: 48px; height: 48px; border-radius: 50%;
-  border: 0; background: var(--white); box-shadow: 0 2px 8px rgba(0,0,0,.2);
+  border: 0; background: var(--bg); box-shadow: 0 2px 8px rgba(0,0,0,.2);
   display: grid; place-items: center; cursor: pointer;
 }
 .float-btn svg { width: 24px; height: 24px; }
@@ -68,15 +94,15 @@ h3 { font-size: 17px; font-weight: 600; }
 
 .sheet {
   position: fixed; z-index: 20; left: 0; right: 0; bottom: 0;
-  max-height: 78vh; overflow-y: auto;
-  background: var(--white);
+  max-height: 62vh; overflow-y: auto; /* always leave some map showing; the sheet scrolls */
+  background: var(--bg);
   border-radius: 16px 16px 0 0;
   box-shadow: 0 -2px 16px rgba(0,0,0,.15);
   padding: 8px 16px calc(16px + var(--safe-bottom));
 }
 .sheet::before {
   content: ""; display: block; width: 36px; height: 4px; border-radius: 2px;
-  background: #d6d6d6; margin: 0 auto 12px;
+  background: var(--handle); margin: 0 auto 12px;
 }
 
 @media (min-width: 700px) {
@@ -89,7 +115,7 @@ h3 { font-size: 17px; font-weight: 600; }
 
 .page {
   position: fixed; inset: 0; z-index: 40;
-  background: var(--white);
+  background: var(--bg);
   overflow-y: auto;
   padding: calc(8px + var(--safe-top)) 16px calc(24px + var(--safe-bottom));
 }
@@ -113,15 +139,15 @@ h3 { font-size: 17px; font-weight: 600; }
   display: flex; align-items: center; justify-content: center; gap: 10px;
   width: 100%; min-height: 56px; padding: 0 20px;
   border: 0; border-radius: var(--radius);
-  background: var(--black); color: var(--white);
+  background: var(--fg); color: var(--bg);
   font: inherit; font-size: 18px; font-weight: 600;
   cursor: pointer; text-decoration: none;
 }
 .btn:active { opacity: .85; }
 .btn:disabled { opacity: .4; cursor: default; }
-.btn.light { background: var(--soft); color: var(--black); }
-.btn.green { background: var(--green); }
-.btn.red { background: var(--red); }
+.btn.light { background: var(--soft); color: var(--fg); }
+.btn.green { background: var(--green); color: #fff; }
+.btn.red { background: var(--red); color: #fff; }
 .btn.small { min-height: 44px; font-size: 16px; width: auto; padding: 0 16px; }
 .btn svg { width: 22px; height: 22px; }
 .btn-row { display: flex; gap: 10px; }
@@ -129,7 +155,7 @@ h3 { font-size: 17px; font-weight: 600; }
 
 .link-btn {
   background: none; border: 0; padding: 12px 0; font: inherit; font-weight: 600;
-  color: var(--black); cursor: pointer; text-decoration: underline; text-underline-offset: 3px;
+  color: var(--fg); cursor: pointer; text-decoration: underline; text-underline-offset: 3px;
 }
 .link-btn.red { color: var(--red); }
 
@@ -142,7 +168,7 @@ input, textarea, select {
   outline: none; appearance: none;
 }
 textarea { min-height: 80px; resize: none; }
-input:focus, textarea:focus { border-color: var(--black); background: var(--white); }
+input:focus, textarea:focus { border-color: var(--fg); background: var(--bg); }
 
 .where-to {
   display: flex; align-items: center; gap: 12px; width: 100%;
@@ -156,7 +182,7 @@ input:focus, textarea:focus { border-color: var(--black); background: var(--whit
   flex: 1; min-height: 44px; border: 0; border-radius: 9px; background: transparent;
   font: inherit; font-weight: 600; cursor: pointer;
 }
-.segment button.on { background: var(--white); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+.segment button.on { background: var(--bg); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
 
 .stepper { display: flex; align-items: center; gap: 4px; }
 .stepper button {
@@ -190,16 +216,16 @@ input:focus, textarea:focus { border-color: var(--black); background: var(--whit
 .section-title { font-size: 14px; font-weight: 700; color: var(--muted); margin: 24px 0 4px; }
 
 .route { position: relative; padding-left: 24px; }
-.route::before { content: ""; position: absolute; left: 5px; top: 10px; bottom: 10px; width: 2px; background: #cfcfcf; }
+.route::before { content: ""; position: absolute; left: 5px; top: 10px; bottom: 10px; width: 2px; background: var(--handle); }
 .route > div { position: relative; padding: 4px 0; }
-.route > div::before { content: ""; position: absolute; left: -24px; top: 9px; width: 12px; height: 12px; border-radius: 50%; background: var(--black); }
+.route > div::before { content: ""; position: absolute; left: -24px; top: 9px; width: 12px; height: 12px; border-radius: 50%; background: var(--fg); }
 .route > div.drop::before { border-radius: 2px; }
 
 .status-bar { display: flex; gap: 4px; margin: 12px 0 4px; }
 .status-bar span { flex: 1; height: 4px; border-radius: 2px; background: var(--line); }
-.status-bar span.on { background: var(--black); }
+.status-bar span.on { background: var(--fg); }
 .waiting-bar { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin: 12px 0 4px; }
-.waiting-bar::after { content: ""; display: block; width: 30%; height: 100%; background: var(--black); animation: slide 1.4s ease-in-out infinite; }
+.waiting-bar::after { content: ""; display: block; width: 30%; height: 100%; background: var(--fg); animation: slide 1.4s ease-in-out infinite; }
 @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
 
 .driver-card { display: flex; align-items: center; gap: 14px; padding: 14px 0; }
@@ -207,17 +233,17 @@ input:focus, textarea:focus { border-color: var(--black); background: var(--whit
 .plate { display: inline-block; padding: 2px 8px; border-radius: 6px; background: var(--soft); font-weight: 700; letter-spacing: 1px; font-size: 15px; }
 .eta { font-size: 34px; font-weight: 800; letter-spacing: -1px; }
 
-.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #b5b5b5; margin-right: 6px; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); margin-right: 6px; }
 .dot.on { background: var(--green); }
 
 .badge {
   display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px;
-  border-radius: 10px; background: var(--red); color: var(--white); font-size: 12px; font-weight: 700;
+  border-radius: 10px; background: var(--red); color: #fff; font-size: 12px; font-weight: 700;
 }
 
 .card { background: var(--soft); border-radius: var(--radius); padding: 14px 16px; }
 
-.notice { background: #fff6d6; border-radius: var(--radius); padding: 12px 14px; font-size: 15px; }
+.notice { background: var(--notice); border-radius: var(--radius); padding: 12px 14px; font-size: 15px; }
 
 /* ---------- Chat ---------- */
 
@@ -225,7 +251,7 @@ input:focus, textarea:focus { border-color: var(--black); background: var(--whit
 .chat .page-head { flex: none; }
 .chat-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 8px 0; }
 .bubble { max-width: 80%; padding: 10px 14px; border-radius: 18px; background: var(--soft); white-space: pre-wrap; word-wrap: break-word; }
-.bubble.mine { align-self: flex-end; background: var(--black); color: var(--white); }
+.bubble.mine { align-self: flex-end; background: var(--fg); color: var(--bg); }
 .bubble time { display: block; font-size: 11px; opacity: .6; margin-top: 2px; }
 .chat-form { flex: none; display: flex; gap: 8px; padding-top: 8px; }
 .chat-form input { flex: 1; }
@@ -238,7 +264,7 @@ input:focus, textarea:focus { border-color: var(--black); background: var(--whit
 .drawer-bg { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.4); }
 .drawer {
   position: fixed; z-index: 51; top: 0; bottom: 0; left: 0; width: 290px; max-width: 85vw;
-  background: var(--white); transform: translateX(-100%); transition: transform .2s;
+  background: var(--bg); transform: translateX(-100%); transition: transform .2s;
   padding: calc(24px + var(--safe-top)) 0 calc(24px + var(--safe-bottom)); overflow-y: auto;
 }
 .drawer.open { transform: none; }
@@ -253,7 +279,7 @@ input:focus, textarea:focus { border-color: var(--black); background: var(--whit
 /* ---------- New request alert (driver) ---------- */
 
 .alert {
-  position: fixed; inset: 0; z-index: 60; background: var(--black); color: var(--white);
+  position: fixed; inset: 0; z-index: 60; background: #000; color: #fff;
   display: flex; flex-direction: column; justify-content: flex-end;
   padding: calc(24px + var(--safe-top)) 20px calc(24px + var(--safe-bottom));
 }
@@ -261,17 +287,17 @@ input:focus, textarea:focus { border-color: var(--black); background: var(--whit
 .alert .alert-actions { max-width: 480px; margin: 0 auto; width: 100%; }
 .alert .muted { color: #b8b8b8; }
 .alert .route::before { background: #555; }
-.alert .route > div::before { background: var(--white); }
-.alert .btn { background: var(--white); color: var(--black); }
-.alert .btn.light { background: #2a2a2a; color: var(--white); }
+.alert .route > div::before { background: #fff; }
+.alert .btn { background: #fff; color: #000; }
+.alert .btn.light { background: #2a2a2a; color: #fff; }
 .alert .note { background: #1f1f1f; border-radius: var(--radius); padding: 12px 14px; }
 
 /* ---------- Toast ---------- */
 
 .toast {
   position: fixed; z-index: 70; left: 50%; top: calc(16px + var(--safe-top)); transform: translateX(-50%);
-  max-width: calc(100vw - 32px); background: var(--black); color: var(--white);
+  max-width: calc(100vw - 32px); background: var(--fg); color: var(--bg);
   padding: 12px 18px; border-radius: var(--radius); font-weight: 500; box-shadow: 0 4px 16px rgba(0,0,0,.25);
 }
 
-.card .btn.light { background: var(--white); }
+.card .btn.light { background: var(--bg); }

@@ -21,10 +21,11 @@ function start(server, handlers) {
       if (msg.type === 'hello') {
         try {
           const login = await auth.verifyToken(msg.token);
-          const user = await db.one('SELECT id, role FROM users WHERE firebase_uid = $1', [login.uid]);
+          const user = await db.one('SELECT id, role, status FROM users WHERE firebase_uid = $1', [login.uid]);
           if (!user) return ws.close();
           userId = user.id;
-          ws.role = user.role;
+          // Accounts waiting for approval only get told when that changes.
+          ws.role = user.status === 'approved' ? user.role : 'waiting';
           if (!sockets.has(userId)) sockets.set(userId, new Set());
           sockets.get(userId).add(ws);
           ws.send(JSON.stringify({ type: 'ready' }));
@@ -66,8 +67,16 @@ function send(userId, data) {
   for (const ws of set) if (ws.readyState === 1) ws.send(text);
 }
 
+// Sends to everyone connected with the given role ('driver' or 'passenger').
+function sendAll(data, role) {
+  const text = JSON.stringify(data);
+  for (const set of sockets.values()) {
+    for (const ws of set) if (ws.readyState === 1 && ws.role === role) ws.send(text);
+  }
+}
+
 function isConnected(userId) {
   return sockets.has(userId);
 }
 
-module.exports = { start, send, isConnected };
+module.exports = { start, send, sendAll, isConnected };

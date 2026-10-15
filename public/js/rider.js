@@ -4,7 +4,7 @@ import {
   $, esc, icons, sheet, page, closePage, pageHead, onActions, busy, toast, formatWhen, minutes,
   statusBar, routeHtml, avatarHtml, telLink, historyList, STATUS_LABEL,
 } from './ui.js';
-import { setMarker, clearMarkers, fit, currentLocation } from './map.js';
+import { setMarker, clearMarkers, fit, currentLocation, setRoute, fetchRoute } from './map.js';
 import { pushBanner, pushStatus } from './push.js';
 import { openChat, chatMessage, chatOpenFor } from './chat.js';
 
@@ -23,7 +23,8 @@ const unread = {};     // ride id -> unread message count
 const D = () => driverInfo.first_name || ctx.driverName;
 
 // The ride happening now (not a scheduled one that hasn't started yet).
-const activeRide = () => rides.find((r) => !r.scheduled_for || MOVING.includes(r.status));
+// A ride the driver is already doing comes first.
+const activeRide = () => rides.find((r) => MOVING.includes(r.status)) || rides.find((r) => !r.scheduled_for);
 const upcoming = () => rides.filter((r) => r.scheduled_for && !MOVING.includes(r.status));
 
 // ---------- Start-up and live updates ----------
@@ -61,7 +62,8 @@ export function onLive(msg) {
     } else if (wasActive && wasActive.id === ride.id && !(ride.status === 'cancelled' && ride.cancelled_by === 'rider')) {
       finished = ride;
     } else if (ride.scheduled_for && ride.status !== 'done' && ride.cancelled_by !== 'rider') {
-      toast(`${D()} ${ride.status === 'declined' ? "can't make" : 'cancelled'} your ride on ${formatWhen(ride.scheduled_for)}.`, 6000);
+      const what = ride.status === 'declined' ? "can't make" : ride.cancelled_by === 'timeout' ? "didn't answer" : 'cancelled';
+      toast(`${D()} ${what} your ride on ${formatWhen(ride.scheduled_for)}.`, 6000);
     }
     if (!draft) render();
   } else if (msg.type === 'car') {
@@ -71,6 +73,7 @@ export function onLive(msg) {
     ride.car = { lat: msg.lat, lng: msg.lng };
     ride.eta_seconds = msg.eta_seconds;
     setMarker('car', ride.car);
+    if (msg.route) { ride.route = msg.route; setRoute(ride.route); }
     const eta = $('#eta');
     if (eta && ride.status === 'on_the_way' && ride.eta_seconds != null) eta.textContent = minutes(ride.eta_seconds);
     if (first) fitRide(ride);
@@ -82,6 +85,10 @@ export function onLive(msg) {
       toast(`${D()}: ${m.body}`);
       if (!draft) render();
     }
+  } else if (msg.type === 'driver') {
+    // Went online or offline, or changed the car or note.
+    driverInfo = msg.driver;
+    render();
   }
 }
 
@@ -116,7 +123,7 @@ function renderHome() {
   const el = sheet(`<div class="stack">
     <div class="small"><span class="dot ${driverInfo.online ? 'on' : ''}"></span>${driverInfo.online
       ? `${esc(D())} is online`
-      : `${esc(D())} is offline. You can still schedule a ride.`}</div>
+      : `${esc(D())} is offline${driverInfo.away_note ? ` · <b>${esc(driverInfo.away_note)}</b>` : ''}. You can still schedule a ride.`}</div>
     <button class="where-to" data-action="where-to">${icons.search}Where to?</button>
     ${saved.length ? `<div class="chips">${saved.map((p) => `<button class="chip" data-action="quick" data-label="${esc(p.label)}">${PLACE_ICONS[p.label] || icons.pin}${esc(p.label)}</button>`).join('')}</div>` : ''}
     ${list.length ? `<div><div class="section-title">Scheduled</div><ul class="list">${list.map((r) => `<li>
@@ -156,6 +163,13 @@ async function startTrip(dropoff) {
   }
 }
 
+// Draws the road from pickup to drop-off, if the screen still wants it once the answer comes back.
+async function showPlannedRoute(from, to, stillWanted) {
+  if (!from || !to) return setRoute(null);
+  const line = await fetchRoute(api, from, to);
+  if (stillWanted()) setRoute(line);
+}
+
 function localInputValue(date) {
   const d = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
   return d.toISOString().slice(0, 16);
@@ -192,6 +206,7 @@ function renderConfirm() {
   </div>`);
 
   fit([t.pickup, t.dropoff]);
+  showPlannedRoute(t.pickup, t.dropoff, () => draft === t);
 
   $('#note', el).addEventListener('input', (e) => { t.note = e.target.value; });
   const at = $('#at', el);
@@ -331,9 +346,19 @@ function contactButtons(ride) {
 
 function rideActions(ride) {
   return {
+    share: (d, btn) => busy(btn, async () => {
+      const { url } = await api('POST', `/rides/${ride.id}/share`);
+      const text = `Follow my ride with ${D()}:`;
+      if (navigator.share) {
+        try { await navigator.share({ title: 'My ride', text, url }); } catch { /* closed */ }
+      } else {
+        try { await navigator.clipboard.writeText(url); toast('Link copied. Anyone with it can follow this ride until it ends.', 5000); }
+        catch { prompt('Copy this link:', url); }
+      }
+    }),
     chat: () => {
       unread[ride.id] = 0;
-      openChat({ ride, meId: ctx.user.id, otherName: driverInfo.name, otherPhone: driverInfo.phone, onClose: render });
+      openChat({ ride, meId: ctx.user.id, otherName: driverInfo.name, otherPhone: driverInfo.phone, role: 'passenger', onClose: render });
     },
     cancel: (d, btn) => {
       if (!confirm('Cancel this ride?')) return;
@@ -354,6 +379,12 @@ function renderRide(ride) {
   setMarker('pickup', { lat: ride.pickup_lat, lng: ride.pickup_lng });
   setMarker('dropoff', { lat: ride.dropoff_lat, lng: ride.dropoff_lng });
   setMarker('car', MOVING.includes(ride.status) ? ride.car : null);
+  if (ride.status === 'on_the_way' || ride.status === 'in_progress') setRoute(ride.route || null);
+  else if (ride.status === 'arrived') setRoute(null);
+  else {
+    const pickup = { lat: ride.pickup_lat, lng: ride.pickup_lng }, dropoff = { lat: ride.dropoff_lat, lng: ride.dropoff_lng };
+    showPlannedRoute(pickup, dropoff, () => { const now = activeRide(); return now && now.id === ride.id && !MOVING.includes(now.status); });
+  }
 
   const h = headline(ride);
   const showEta = ride.status === 'on_the_way';
@@ -366,7 +397,10 @@ function renderRide(ride) {
     ${contactButtons(ride)}
     <div style="margin-top:16px">${routeHtml(ride)}</div>
     ${ride.passengers > 1 || ride.note ? `<p class="small muted" style="margin-top:8px">${ride.passengers > 1 ? `${ride.passengers} people` : ''}${ride.passengers > 1 && ride.note ? ' · ' : ''}${ride.note ? esc(ride.note) : ''}</p>` : ''}
-    ${ride.status !== 'in_progress' ? '<button class="link-btn red" data-action="cancel">Cancel ride</button>' : ''}
+    <div class="row" style="justify-content:space-between">
+      <button class="link-btn" data-action="share">Share my ride</button>
+      ${ride.status !== 'in_progress' ? '<button class="link-btn red" data-action="cancel">Cancel ride</button>' : ''}
+    </div>
     ${pushBanner(`Get a heads-up when ${esc(D())} is close and has arrived.`)}
   </div>`);
   onActions(el, { ...rideActions(ride), 'enable-push': (d, btn) => busy(btn, async () => { await ctx.enablePush(); render(); }) });
@@ -379,6 +413,7 @@ function renderFinished() {
   let title, text;
   if (ride.status === 'done') { title = "You're there"; text = `Thanks for riding with ${esc(D())}.`; }
   else if (ride.status === 'declined') { title = `${esc(D())} can't take this ride`; text = 'Sorry! Send a message or call if you need to sort something out.'; }
+  else if (ride.cancelled_by === 'timeout') { title = `${esc(D())} didn't get to your request in time`; text = `Try again, or give ${esc(D())} a call.`; }
   else { title = `${esc(D())} cancelled your ride`; text = 'Send a message or call if you need to sort something out.'; }
   const el = sheet(`<div class="stack">
     <h2>${title}</h2>
