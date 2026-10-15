@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Dekaiah Dash</title>
+  <meta name="theme-color" content="#000000">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Dekaiah Dash">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div id="map"></div>
+  <button id="menu-btn" class="float-btn hidden" aria-label="Menu"></button>
+  <button id="locate-btn" class="float-btn hidden" aria-label="Show my location"></button>
+  <div id="sheet" class="sheet hidden"></div>
+
+  <div id="drawer-bg" class="drawer-bg hidden"></div>
+  <nav id="drawer" class="drawer"></nav>
+
+  <div id="page" class="page hidden"></div>
+  <div id="alert" class="alert hidden"></div>
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

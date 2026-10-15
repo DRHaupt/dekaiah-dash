@@ -1,0 +1,15 @@
+# Replace dash.example.com with your domain, and YOUR-PROJECT-ID with your Firebase project ID.
+dash.example.com {
+	encode gzip
+
+	# Lets Google login run on your own domain (needed for iPhones).
+	handle /__/* {
+		reverse_proxy https://YOUR-PROJECT-ID.firebaseapp.com {
+			header_up Host {upstream_hostport}
+		}
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:3000
+	}
+}
