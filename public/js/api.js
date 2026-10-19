@@ -7,15 +7,20 @@ export function setTokenSource(fn) {
 }
 
 export async function api(method, path, body) {
-  const token = await getToken();
-  const res = await fetch('/api' + path, {
-    method,
-    headers: {
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-      ...(token ? { Authorization: 'Bearer ' + token } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const send = async (fresh) => {
+    const token = await getToken(fresh);
+    return fetch('/api' + path, {
+      method,
+      headers: {
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+        ...(token ? { Authorization: 'Bearer ' + token } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  };
+  let res = await send(false);
+  // The saved login token may be stale; get a brand new one and try once more.
+  if (res.status === 401) res = await send(true);
   let data = null;
   try { data = await res.json(); } catch { /* empty reply */ }
   if (!res.ok) throw new Error((data && data.error) || "Couldn't reach the server. Check your connection.");

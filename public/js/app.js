@@ -39,7 +39,8 @@ function loginError(err) {
     'auth/network-request-failed': "Couldn't connect. Check your internet.",
     'auth/popup-closed-by-user': 'Sign-in was closed before it finished.',
   };
-  return new Error(messages[code] || 'Sign-in didn’t work. Try again.');
+  // Unknown problems show Firebase's code so it can be looked up.
+  return new Error(messages[code] || `Sign-in didn’t work (${code || err.message}). Try again.`);
 }
 
 // ---------- Screens before the app ----------
@@ -240,7 +241,7 @@ async function boot() {
 
   const app = initializeApp(config.firebase);
   auth = getAuth(app);
-  setTokenSource(() => (auth.currentUser ? auth.currentUser.getIdToken() : null));
+  setTokenSource((fresh) => (auth.currentUser ? auth.currentUser.getIdToken(!!fresh) : null));
   getRedirectResult(auth).catch((err) => toast(loginError(err).message));
 
   let started = false;

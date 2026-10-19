@@ -21,7 +21,10 @@ function isDriverLogin(login) {
 async function loadUser(req, res, next) {
   const header = req.get('Authorization') || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
-  if (!token) return res.status(401).json({ error: 'Please log in.' });
+  if (!token) {
+    console.error('Login check failed: the request had no login token', req.method, req.originalUrl);
+    return res.status(401).json({ error: 'Please log in.' });
+  }
   try {
     req.login = await module.exports.verifyToken(token);
   } catch (err) {
