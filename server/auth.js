@@ -24,7 +24,9 @@ async function loadUser(req, res, next) {
   if (!token) return res.status(401).json({ error: 'Please log in.' });
   try {
     req.login = await module.exports.verifyToken(token);
-  } catch {
+  } catch (err) {
+    // Usually a wrong FIREBASE_PROJECT_ID, the server's clock being off, or no internet access from the server.
+    console.error('Login check failed:', err.code || '', err.message);
     return res.status(401).json({ error: 'Please log in again.' });
   }
   req.user = await db.one('SELECT * FROM users WHERE firebase_uid = $1', [req.login.uid]);
