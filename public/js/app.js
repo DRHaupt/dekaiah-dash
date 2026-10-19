@@ -224,8 +224,29 @@ function setupDrawer(user) {
 
 // ---------- Boot ----------
 
+// Logins are saved in the browser. Private Browsing or "Block All Cookies" stops that,
+// which makes login look like it works and then forget you straight away.
+function canSaveLogin() {
+  try {
+    for (const store of [localStorage, sessionStorage]) {
+      store.setItem('dd-test', '1');
+      store.removeItem('dd-test');
+    }
+    return !!window.indexedDB;
+  } catch {
+    return false;
+  }
+}
+
 async function boot() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+
+  if (!canSaveLogin()) {
+    return showMessage("This browser can't keep you logged in",
+      'Your browser is blocking websites from saving data, so your login gets forgotten. '
+      + 'On iPhone, turn off <b>Settings → Safari → Block All Cookies</b> and close any Private tabs. '
+      + 'Then open Dekaiah Dash in a normal tab.', { canLogout: false });
+  }
 
   let config;
   try {
