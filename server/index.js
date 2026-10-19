@@ -9,6 +9,21 @@ const app = express();
 app.set('trust proxy', 'loopback');
 app.use(express.json({ limit: '4mb' })); // big enough for a profile photo
 
+// Google login pages. Firebase needs them on this domain so login works on iPhones,
+// so they're passed through from Firebase here.
+app.get('/__/{*path}', async (req, res) => {
+  try {
+    const upstream = await fetch(`https://${process.env.FIREBASE_PROJECT_ID}.firebaseapp.com${req.originalUrl}`);
+    res.status(upstream.status);
+    for (const name of ['content-type', 'cache-control']) {
+      if (upstream.headers.get(name)) res.set(name, upstream.headers.get(name));
+    }
+    res.send(Buffer.from(await upstream.arrayBuffer()));
+  } catch {
+    res.status(502).send('Login is unavailable right now. Try again in a minute.');
+  }
+});
+
 app.use('/api', api.router);
 app.use('/uploads', express.static(path.resolve(process.env.UPLOAD_DIR || 'uploads'), { maxAge: '30d' }));
 app.use(express.static(path.join(__dirname, '..', 'public'), { maxAge: 0 }));

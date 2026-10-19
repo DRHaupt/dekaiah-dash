@@ -453,7 +453,8 @@ router.post('/rides/:id/share', wrap(async (req, res) => {
     token = crypto.randomBytes(12).toString('base64url');
     await db.query('UPDATE rides SET share_token = $1 WHERE id = $2', [token, ride.id]);
   }
-  res.json({ url: `${req.protocol}://${req.get('host')}/track/${token}` });
+  const site = process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+  res.json({ url: `${site.replace(/\/$/, '')}/track/${token}` });
 }));
 
 // ---------- Messages ----------

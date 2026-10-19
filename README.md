@@ -20,7 +20,7 @@ Friends request rides, Dekaiah drives. No payments and no prices. There's one dr
 | Live updates | WebSockets |
 | Phone notifications | Web Push, using keys you make yourself for free |
 | Text messages | Twilio (optional, costs money: see below) |
-| HTTPS | Caddy (gets a free certificate automatically) |
+| HTTPS | Cloudflare Tunnel, or Caddy if you'd rather open ports yourself |
 
 The front end is plain HTML, CSS and JavaScript in `public/`, with no build step. The server is in `server/`.
 
@@ -52,6 +52,8 @@ These steps assume Ubuntu 22.04 or 24.04, a domain name (for example `dash.examp
 
 ### 1. Point your domain at the server
 
+*Using a Cloudflare Tunnel? Skip this step. The tunnel sets up the domain for you (see step 8).*
+
 At your domain registrar or DNS provider, add an **A record** for `dash.example.com` pointing to your server's public IP address. Wait until `ping dash.example.com` shows that IP.
 
 Open the web ports if you use a firewall:
@@ -64,6 +66,8 @@ sudo ufw enable
 ```
 
 ### 2. Install Node.js, PostgreSQL, Caddy and git
+
+*Using a Cloudflare Tunnel? You can leave out the Caddy lines.*
 
 ```bash
 # Node.js 22
@@ -121,7 +125,7 @@ sudo chown -R dekaiah:dekaiah /opt/dekaiah-dash
    - `apiKey` → `FIREBASE_API_KEY`
    - `projectId` → `FIREBASE_PROJECT_ID`
    - `appId` → `FIREBASE_APP_ID`
-   - Set `FIREBASE_AUTH_DOMAIN` to **your own domain**, `dash.example.com`, not the `firebaseapp.com` one. This makes Google login work on iPhones (Caddy forwards the login pages, see step 8).
+   - Set `FIREBASE_AUTH_DOMAIN` to **your own domain**, `dash.example.com`, not the `firebaseapp.com` one. This makes Google login work on iPhones. The app passes Firebase's login pages through on your domain.
 7. Google login on your own domain also needs this:
    - Open https://console.cloud.google.com/apis/credentials and select the same project.
    - Click the **OAuth 2.0 Client ID** called "Web client (auto created by Google Service)".
@@ -154,7 +158,25 @@ Twilio isn't free. Expect about US$1–2 a month for the phone number, plus abou
 
 Leave the Twilio lines blank to turn texts off.
 
-### 8. Set up HTTPS with Caddy
+### 8. Set up HTTPS
+
+HTTPS is required for location and notifications. Pick **one** of these options.
+
+#### Option A: Cloudflare Tunnel (no open ports needed)
+
+Cloudflare handles HTTPS, and your server doesn't need ports 80 or 443 open.
+
+1. In `.env`, set `PUBLIC_URL=https://dash.example.com` (your domain).
+2. In the Cloudflare dashboard, go to **Zero Trust → Networks → Tunnels**, create a tunnel, and install `cloudflared` on the server with the command it gives you.
+3. Add a **Public hostname** to the tunnel:
+   - Subdomain and domain: `dash.example.com`
+   - Service type **HTTP**, URL `localhost:3000`
+   - If `cloudflared` runs on a **different machine**, use this server's internal IP instead (for example `192.168.1.50:3000`), and set `HOST=0.0.0.0` in `.env` so the app accepts connections from your network.
+4. In Cloudflare, under your domain's **Speed → Optimization**, make sure **Rocket Loader** is **off**. It breaks the app's scripts.
+
+You don't need Caddy with this option. If you installed it, turn it off with `sudo systemctl disable --now caddy`.
+
+#### Option B: Caddy (open ports 80 and 443 yourself)
 
 ```bash
 sudo cp /opt/dekaiah-dash/deploy/Caddyfile /etc/caddy/Caddyfile
@@ -167,7 +189,7 @@ Replace `dash.example.com` with your domain and `YOUR-PROJECT-ID` with your Fire
 sudo systemctl reload caddy
 ```
 
-Caddy gets a free Let's Encrypt certificate and renews it on its own. HTTPS is required for location and notifications.
+Caddy gets a free Let's Encrypt certificate and renews it on its own. Ports 80 and 443 must be open, both on the server (`ufw`) and in your hosting provider's firewall.
 
 ### 9. Start the app (and keep it running)
 
