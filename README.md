@@ -79,9 +79,19 @@ sudo apt update && sudo apt install -y caddy
 
 ### 3. Create the database
 
-Pick a password and use it in place of `CHANGE_ME`:
+First make sure PostgreSQL is running:
 
 ```bash
+sudo systemctl enable --now postgresql
+pg_lsclusters
+```
+
+`pg_lsclusters` should show a line with `online`. If it says `down`, run `sudo pg_ctlcluster 16 main start` (use the version number it shows). If it shows nothing at all, create the database cluster with `sudo pg_createcluster 16 main --start`.
+
+Then pick a password and use it in place of `CHANGE_ME`. The `cd /tmp` avoids a harmless "could not change directory" warning:
+
+```bash
+cd /tmp
 sudo -u postgres psql -c "CREATE USER dekaiah WITH PASSWORD 'CHANGE_ME';"
 sudo -u postgres psql -c "CREATE DATABASE dekaiah_dash OWNER dekaiah;"
 ```
