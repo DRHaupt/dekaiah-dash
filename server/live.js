@@ -10,8 +10,9 @@ function start(server, handlers) {
   onDriverLocation = handlers.onDriverLocation;
   const wss = new WebSocketServer({ server, path: '/live' });
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, req) => {
     let userId = null;
+    const cookie = req.headers.cookie; // the login cookie comes with the connection
 
     ws.on('message', async (raw) => {
       let msg;
@@ -20,7 +21,8 @@ function start(server, handlers) {
       // The first message must be the login token.
       if (msg.type === 'hello') {
         try {
-          const login = await auth.verifyToken(msg.token);
+          const login = await auth.loginFrom(cookie, msg.token);
+          if (!login) return ws.close();
           const user = await db.one('SELECT id, role, status FROM users WHERE firebase_uid = $1', [login.uid]);
           if (!user) return ws.close();
           userId = user.id;

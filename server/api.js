@@ -6,7 +6,8 @@ const db = require('./db');
 const live = require('./live');
 const notify = require('./notify');
 const maps = require('./maps');
-const { loadUser, approvedOnly, driverOnly, isDriverLogin } = require('./auth');
+const auth = require('./auth');
+const { loadUser, approvedOnly, driverOnly, isDriverLogin } = auth;
 
 const router = express.Router();
 const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || 'uploads');
@@ -175,6 +176,24 @@ router.get('/track/:token', wrap(async (req, res) => {
   out.car_position = withCar.car || null;
   out.route = withCar.route || null;
   res.json(out);
+}));
+
+// After logging in with Google or email, the phone swaps its Firebase token for our login cookie.
+router.post('/session', wrap(async (req, res) => {
+  let login;
+  try {
+    login = await auth.verifyToken(String(req.body.token || ''));
+  } catch (err) {
+    console.error('Login check failed:', err.code || '', err.message);
+    throw new Oops(401, 'That login didn’t work. Try again.');
+  }
+  await auth.startSession(req, res, login);
+  res.json({ ok: true });
+}));
+
+router.post('/logout', wrap(async (req, res) => {
+  await auth.endSession(req, res);
+  res.json({ ok: true });
 }));
 
 router.use(wrap(loadUser));

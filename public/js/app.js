@@ -150,13 +150,16 @@ function showMessage(title, text, { canLogout = true } = {}) {
 
 // ---------- Logged in ----------
 
-async function afterLogin() {
-  let me;
+// True once this phone has our login cookie. From then on, Firebase's own saved login doesn't matter.
+let loggedIn = false;
+
+async function afterLogin(me) {
   try {
-    me = await api('GET', '/me');
+    if (!me) me = await api('GET', '/me');
   } catch (err) {
     return showMessage("Can't connect", esc(err.message) + ' <br><br><button class="btn light" onclick="location.reload()">Try again</button>');
   }
+  loggedIn = true;
   const user = me.user;
 
   if (!user) {
@@ -191,7 +194,8 @@ async function afterLogin() {
 async function logout() {
   await disablePush();
   stopLive();
-  await signOut(auth);
+  try { await api('POST', '/logout'); } catch { /* already logged out */ }
+  try { await signOut(auth); } catch { /* Firebase wasn't holding a login */ }
   location.reload();
 }
 
@@ -272,11 +276,27 @@ async function boot() {
   setTokenSource((fresh) => (auth.currentUser ? auth.currentUser.getIdToken(!!fresh) : null));
   getRedirectResult(auth).catch((err) => toast(loginError(err).message));
 
+  // Already logged in on this phone? The login cookie answers without asking Firebase.
+  // (A plain request on purpose: it must not fall back to Firebase's token.)
+  try {
+    const res = await fetch('/api/me');
+    if (res.ok) return afterLogin(await res.json());
+  } catch { /* not logged in yet */ }
+
+  // Not logged in: once Firebase confirms a Google or email login, swap it for our login cookie.
   let started = false;
-  onAuthStateChanged(auth, (firebaseUser) => {
+  onAuthStateChanged(auth, async (firebaseUser) => {
+    if (loggedIn) return;
     if (!firebaseUser) return showWelcome();
     if (started) return;
     started = true;
+    try {
+      await api('POST', '/session', { token: await firebaseUser.getIdToken() });
+    } catch (err) {
+      started = false;
+      toast(err.message);
+      return showWelcome();
+    }
     afterLogin();
   });
 }

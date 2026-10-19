@@ -80,3 +80,13 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 ALTER TABLE rides ADD COLUMN IF NOT EXISTS reminder_sent BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE rides ADD COLUMN IF NOT EXISTS share_token TEXT UNIQUE;
 ALTER TABLE driver_state ADD COLUMN IF NOT EXISTS away_note TEXT NOT NULL DEFAULT '';
+
+-- Logged-in phones. After a Google or email login is checked once, the phone gets a cookie with this token.
+CREATE TABLE IF NOT EXISTS sessions (
+  token          TEXT PRIMARY KEY,
+  firebase_uid   TEXT NOT NULL,
+  email          TEXT,
+  email_verified BOOLEAN NOT NULL DEFAULT false,
+  name           TEXT NOT NULL DEFAULT '',
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
