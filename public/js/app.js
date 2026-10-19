@@ -1,7 +1,9 @@
 // Start-up: login, sign-up, waiting for approval, then the passenger or driver screens.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import {
-  getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,
+  initializeAuth, browserLocalPersistence, indexedDBLocalPersistence, browserSessionPersistence,
+  browserPopupRedirectResolver,
+  onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,
   signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { api, setTokenSource, connectLive, stopLive } from './api.js';
@@ -261,7 +263,12 @@ async function boot() {
   initMap();
 
   const app = initializeApp(config.firebase);
-  auth = getAuth(app);
+  // Save the login in localStorage first. Firebase's default (IndexedDB) can come back empty on some
+  // iPhones right after logging in, which makes Firebase think you logged out and drops you.
+  auth = initializeAuth(app, {
+    persistence: [browserLocalPersistence, indexedDBLocalPersistence, browserSessionPersistence],
+    popupRedirectResolver: browserPopupRedirectResolver,
+  });
   setTokenSource((fresh) => (auth.currentUser ? auth.currentUser.getIdToken(!!fresh) : null));
   getRedirectResult(auth).catch((err) => toast(loginError(err).message));
 
