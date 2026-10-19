@@ -14,7 +14,7 @@ Friends request rides, Dekaiah drives. No payments and no prices. There's one dr
 | Server | Node.js, Express |
 | Database | PostgreSQL |
 | Login | Firebase Authentication (Google and email/password), free plan |
-| Map | Leaflet and OpenStreetMap, free with no key. Dark mode uses CARTO's free dark map. |
+| Map | Leaflet and OpenStreetMap, free with no key (dark mode darkens the same map) |
 | Address search | Nominatim (OpenStreetMap), free with no key |
 | Drive times and route lines | OSRM public server, free with no key |
 | Live updates | WebSockets |

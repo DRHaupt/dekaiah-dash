@@ -34,6 +34,8 @@
     color-scheme: dark;
   }
   .leaflet-container a { color: #8ab4f8; }
+  /* Turns the light map dark without needing a second map service. */
+  .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9); }
   .leaflet-control-attribution { background: rgba(22,22,22,.7) !important; color: #aaa; }
 }
 

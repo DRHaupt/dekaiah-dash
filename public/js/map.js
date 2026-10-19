@@ -11,25 +11,16 @@ const ICONS = {
   car: () => L.divIcon({ className: '', html: `<div class="car-pin">${icons.car}</div>`, iconSize: [38, 38], iconAnchor: [19, 19] }),
 };
 
-// Light map normally; dark map (free CARTO tiles, also OpenStreetMap data) when the phone is in dark mode.
-const TILES = {
-  light: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png', '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'],
-  dark: ['https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'],
-};
-let tiles;
 let routeLine;
 
 export function initMap() {
   map = L.map('map', { zoomControl: false, attributionControl: true }).setView([20, 0], 2);
   map.attributionControl.setPrefix(false);
-  const dark = window.matchMedia('(prefers-color-scheme: dark)');
-  const useTiles = () => {
-    if (tiles) tiles.remove();
-    const [url, attribution] = TILES[dark.matches ? 'dark' : 'light'];
-    tiles = L.tileLayer(url, { maxZoom: 19, attribution }).addTo(map);
-  };
-  useTiles();
-  dark.addEventListener('change', useTiles);
+  // Free OpenStreetMap tiles, no key needed. Dark mode darkens these same tiles with CSS (see app.css).
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  }).addTo(map);
   return map;
 }
 
